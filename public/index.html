@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KN Election Tracker</title>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
+    <style type="text/css">
+      #map {
+        height: 100%;
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+
+  </head>
+  <div id="map"></div>
+  <script defer
+          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBTxaPZPkH5IYYm6CcOVaGNO_dhaZt88wA
+        &libraries=visualization&callback=initMap">
+  </script>
+
+  <script>
+
+    let mapResolve;
+
+    let promiseMap = new Promise((resolve)=>{mapResolve = resolve});
+
+    let infoWindow, map, electionResults, colors, electionDistricts;
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: {lat: 47.707216, lng: 9.168514},
+        zoom: 13,
+        styles: [{
+          featureType: 'poi',
+          stylers: [{ visibility: 'off' }]  // Turn off points of interest.
+        }],
+        disableDoubleClickZoom: false,
+        streetViewControl: false,
+        disableDefaultUI: true
+      });
+      mapResolve();
+      //console.info("Map done");
+      infoWindow = new google.maps.InfoWindow();
+
+    }
+
+    let dl1 = new Promise((resolve)=>{
+      $.get('/api/elections/ob2020/district', (data) =>{
+        electionResults = typeof data === "string" ? JSON.parse(data) : data;
+        //console.info('geo data done');
+        resolve();
+      });
+    });
+    let dl2 = new Promise((resolve)=>{
+      $.get('/api/geo/election_districts/2020', function (data) {
+        electionDistricts = typeof data === "string" ? JSON.parse(data) : data;
+        //console.info('election data done');
+        resolve();
+      }) ;
+    });
+    let dl3 = new Promise((resolve)=>{
+      $.get('/api/color/2020', function (data) {
+        colors = typeof data === "string" ? JSON.parse(data) : data;
+        //console.info('color done');
+        resolve();
+      });
+    });
+
+    Promise.all([promiseMap, dl1, dl2, dl3]).then(()=>{
+      //console.info('Doing all');
+      for(let district of electionDistricts)
+      {
+        //console.info(district)
+        for(let bound of district.geometry)
+        {
+          let poly = new google.maps.Polygon({
+            paths: bound,
+            strokeColor: districtWinnerColor(district),
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: districtWinnerColor(district),
+            fillOpacity: 0.4,
+          });
+          poly.setMap(map);
+          poly.addListener("click", (e)=>showInfo(e, district));
+        }
+      }
+    });
+
+    function getWinner(district) {
+      let contestant = electionResults['result'][district.number/10]['result']['contestants'];
+      //console.info(district.number, district.number/10)
+      let max_i = 0;
+
+      for(let i = 0; i < Object.keys(contestant).length; ++i)
+      {
+       // console.info(contestant[max_i], contestant[i]);
+        if(Number(contestant[max_i]) < Number(contestant[i]))
+        {
+          //console.info('<');
+          max_i = i;
+        }
+      }
+
+      return max_i;
+    }
+
+    function districtWinnerColor(district) {
+
+      return colors[getWinner(district)];
+
+    }
+
+    function districtColor(district) {
+
+      let r = 0, g = 0, b = 0, votes = 0;
+      let contestants = electionResults['result'][district.number/10]['result']['contestants'];
+      for(let i = 0; i < Object.keys(contestants).length; ++i)
+      {
+        let rgb = hexToRgb(colors[i]);
+        console.info(contestants[i], rgb);
+        r+=rgb.r*contestants[i];
+        g+=rgb.g*contestants[i];
+        b+=rgb.b*contestants[i];
+        votes+=Number(contestants[i]);
+      }
+      console.info(votes);
+
+      r/=votes;
+      g/=votes;
+      b/=votes;
+
+      r = Math.round(r);
+      g = Math.round(g);
+      b = Math.round(b);
+
+      console.info(district.name);
+      console.info(r, g, b);
+      console.info(rgbToHex(r, g, b));
+
+      return rgbToHex(r, g, b);
+
+    }
+    
+
+    function showInfo(event, district) {
+      const polygon = this;
+
+      let content =
+              `${district.name} (${district.number})<br>`;
+
+      if(electionResults !== undefined)
+      {
+        console.info(electionResults['result']);
+        let result = electionResults['result'][district.number/10]['result'];
+        content += `Wähler / Berechtigte: ${result.votes} / ${result.eligible}<br>`+
+                `Wahlquote: ${Math.fround(result.votes/result.eligible*100).toFixed(2)}%<br>` +
+                `Gewinner: <b>${electionResults.contestants[getWinner(district)].surname}</b><br>` +
+                   `Ungültig: ${result.invalid}</br><br>`;
+
+
+        for(let i = 0; i < Object.keys(result.contestants).length; ++i)
+        {
+          let winner = getWinner(district) === i;
+
+          if(winner)
+            content+=`<b>`;
+
+          content += `${electionResults.contestants[i].surname}: ${result.contestants[i]}<br>`;
+
+          if(winner)
+            content+=`</b>`;
+        }
+
+      }
+
+
+      infoWindow.setContent(content);
+      infoWindow.setPosition(event.latLng);
+      infoWindow.open(map);
+
+    }
+
+    function hexToRgb(hex) {
+      var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : null;
+    }
+
+    function rgbToHex(r, g, b) {
+      return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+    }
+    function componentToHex(c) {
+      var hex = c.toString(16);
+      return hex.length == 1 ? "0" + hex : hex;
+    }
+
+  </script>
+
+  </body>
+</html>
