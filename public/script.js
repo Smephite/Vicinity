@@ -5,8 +5,10 @@ const app = {
     infoWindow: null,
     map: null,
     load(){
-        app.loadingPromises.push(app.loadColors(), app.loadElectionData(), app.loadElectionDistricts(), new Promise((resolve => app.mapResolve = resolve)));
+        let color = app.loadColors();
+        app.loadingPromises.push(color, app.loadElectionData(), app.loadElectionDistricts(), new Promise((resolve => app.mapResolve = resolve)));
         Promise.all(app.loadingPromises).then(app.drawMap);
+        Promise.all([app.loadCityElectionData(), color]).then(app.initCityStats)
     },
     drawMap(){
         for(let district of app.storage.districts)
@@ -102,10 +104,51 @@ const app = {
     loadColors(){
         return new Promise((resolve =>
             $.get('/api/color/2020', function (data) {
-            app.storage.colors = typeof data === "string" ? JSON.parse(data) : data;
-            //console.info('color done');
-            resolve();
+                app.storage.colors = typeof data === "string" ? JSON.parse(data) : data;
+                //console.info('color done');
+                resolve();
         })));
+    },
+    loadCityElectionData(){
+        return new Promise((resolve)=>{
+            $.get('/api/elections/ob2020/city', (data) =>{
+                app.storage.electionCity = typeof data === "string" ? JSON.parse(data) : data;
+                resolve();
+            });
+        });
+    },
+    initCityStats(){
+
+        let ctx = document.getElementById('election_result_chart');
+
+        let data = app.storage.electionCity;
+        let contestants = data.contestants;
+        let result = data.result.result;
+
+        let barChartData = {datasets: []};
+
+        if(app.storage.colors[0] === undefined)
+        {
+            console.error(app.storage.colors);
+        }
+
+        for(let i = 0; i < contestants.length; ++i)
+        {
+            barChartData.datasets.push({label: `${contestants[i].name} ${contestants[i].surname}`, data: [(result.contestants[i]/result.valid*100).toFixed(2)], backgroundColor: app.storage.colors[i]});
+        }
+        barChartData.datasets.sort((a, b)=>{return b.data[0]-a.data[0]});
+
+        var myChart = new Chart(ctx, {
+            type: 'bar',
+            data: barChartData,
+            options: {
+                legend: {
+                    display: true
+                },
+                maintainAspectRatio: false
+            }
+        });
+        $('#statbtn').show();
     },
     initMap(){
         map = new google.maps.Map(document.getElementById('map'), {
