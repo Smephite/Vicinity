@@ -27,7 +27,7 @@ addContestant('Andreas', 'Matt');
 addContestant('Jury', 'Martin');
 addContestant('Andreas', 'Hennemann');
 addContestant('Luigi', 'Pantisano');
-addContestant('Sonstige', 'others');
+addContestant('Sonstige', 'Andere');
 
 module.exports.city = async (req, res)=>{
     let data = await csv(csv_options).fromStream(request.get(CITY_RESULTS));
