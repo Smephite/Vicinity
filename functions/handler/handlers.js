@@ -1,4 +1,5 @@
 const ob2020 = require('./ob2020');
+const lw2021 = require('./lw2021');
 const districts = require('./districts');
 const color = require('./colors');
 const apis = {
@@ -8,6 +9,16 @@ const apis = {
                 'city': ob2020.city,
                 'district': ob2020.district,
                 'votingdistrict': ob2020.votingdistrict,
+            },
+            'new_ob2020': {
+                'city': ob2020.city_new,
+                'district': ob2020.district_new,
+                'votingdistrict': ob2020.votingdistrict_new,
+            },
+            'lw2021': {
+                'city': lw2021.city,
+                'district': lw2021.district,
+                'votingdistrict': lw2021.votingdistrict
             }
         },
     'geo':
@@ -22,15 +33,16 @@ const apis = {
         },
     'color':
         {
-            '2020': color._2020
+            '2020': color._2020,
+            'lw2021': color._lw2021
         }
 };
 
-module.exports = function (app) {
-    add(app, '/api', undefined, apis);
+module.exports = function (express) {
+    add(express, '/api', undefined, apis);
 };
 
-function add(app, complete_path, path, obj)
+function add(express, complete_path, path, obj)
 {
     if(obj === undefined)
     {
@@ -39,11 +51,11 @@ function add(app, complete_path, path, obj)
     //console.info(`Add ${complete_path} ${path} ${typeof obj}: `, obj);
     if(typeof obj === "function" && complete_path !== undefined){
         console.info(`Adding func ${complete_path}`);
-        app.get(complete_path, obj);
+        express.get(complete_path, obj);
     } else if(typeof obj === "string" && complete_path !== undefined)
     {
         console.info(`Adding string ${complete_path}`);
-        app.get(complete_path, require(obj));
+        express.get(complete_path, require(obj));
     } else if(typeof obj === "object")
     {
         //console.info("object! ", obj);
@@ -54,10 +66,10 @@ function add(app, complete_path, path, obj)
                 continue;
             }
             //console.info(`Subpath: ${complete_path} ${key}`, obj[key], obj);
-            add(app, complete_path + `/${key}`, key, obj[key]);
+            add(express, complete_path + `/${key}`, key, obj[key]);
         }
         console.info(`Adding listing for ${complete_path}*`);
-        app.get(`${complete_path}*`, (req, res, next) => handleListing(complete_path, req, res, next));
+        express.get(`${complete_path}*`, (req, res, next) => handleListing(complete_path, req, res, next));
     }  else {
         console.error(`Invalid type: ${complete_path}: ${obj} ${typeof obj}`);
     }
@@ -85,7 +97,7 @@ function handleListing(path, req, res, next){
         methods = methods['methods'];
     }
 
-    res.status(405).json({'code': 405, 'message': 'Invalid api method', 'path': path, 'methods': methods});
+    res.status(200).json({'code': 404, 'message': 'Invalid api method', 'path': path, 'methods': methods});
 }
 
 function objToClean(obj)

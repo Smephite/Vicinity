@@ -1,6 +1,5 @@
 const functions = require('firebase-functions');
 const express = require('express');
-const bodyParser = require('body-parser');
 const mcache = require('memory-cache');
 
 const CACHE_DURATION = 3600;
@@ -11,8 +10,8 @@ require('dotenv').config();
 const app = express();
 
 //app.use(require('cors'));
-app.use(bodyParser.urlencoded({extended: false}));
-app.use(bodyParser.json());
+app.use(express.urlencoded({extended: false}));
+app.use(express.json());app.set('json spaces', 1)
 
 app.get('*',
     (req, res, next) => {

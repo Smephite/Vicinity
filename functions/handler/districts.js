@@ -56,7 +56,26 @@ module.exports.voting_2018 = async (req, res, next)=>{
         let district = {};
         district.name = dis['properties']['Gebäude'];
         district.number = Number(dis['properties']['WB_NR']);
-        district.geometry = dis['geometry']['coordinates'];
+
+        let geo = [];
+
+        for(let bounds of dis['geometry']['coordinates'])
+        {
+            let points = [];
+            if(Array.isArray(bounds) && bounds.length === 1)
+            {
+                bounds = bounds[0];
+            }
+            for(let point of bounds)
+            {
+                points.push({lat: point[1],lng: point[0]})
+            }
+            geo.push(points);
+        }
+
+
+        district.geometry = geo;
+
         districts.push(district);
     }
 
@@ -72,7 +91,25 @@ module.exports.voting_old = async (req, res, next)=>{
     {
         let district = {};
         district.number = Number(dis['properties']['WB_NR']);
-        district.geometry = dis['geometry']['coordinates'];
+        let geo = [];
+
+        for(let bounds of dis['geometry']['coordinates'])
+        {
+            let points = [];
+            if(Array.isArray(bounds) && bounds.length === 1)
+            {
+                bounds = bounds[0];
+            }
+            for(let point of bounds)
+            {
+                points.push({lat: point[1],lng: point[0]})
+            }
+            geo.push(points);
+        }
+
+
+        district.geometry = geo;
+
         districts.push(district);
     }
 
@@ -89,7 +126,26 @@ module.exports.districts = async (req, res, next)=>{
         let district = {};
         district.name = dis['properties']['STT_NAME'];
         district.number = Number(dis['properties']['STT']);
-        district.geometry = dis['geometry']['coordinates'];
+
+        let geo = [];
+
+        for(let bounds of dis['geometry']['coordinates'])
+        {
+            let points = [];
+            if(Array.isArray(bounds) && bounds.length === 1)
+            {
+                bounds = bounds[0];
+            }
+            for(let point of bounds)
+            {
+                points.push({lat: point[1],lng: point[0]})
+            }
+            geo.push(points);
+        }
+
+
+        district.geometry = geo;
+
         districts.push(district);
     }
 

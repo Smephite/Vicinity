@@ -2,6 +2,10 @@ const CITY_RESULTS = 'https://www.konstanz.de/konstanz/wahlen/OB-Wahl/08335043/h
 const DISTRICT_RESULTS = 'https://www.konstanz.de/konstanz/wahlen/OB-Wahl/08335043/html5/Open-Data-Oberbuergermeisterwahl-_Stadt-Konstanz_1-40.csv';
 const VOTING_DISTRICT_RESULTS = 'https://www.konstanz.de/konstanz/wahlen/OB-Wahl/08335043/html5/Open-Data-Oberbuergermeisterwahl-_Stadt-Konstanz_16.csv';
 
+const CITY_RESULTS_NEW = 'https://www.konstanz.de/konstanz/wahlen/OB-Wahl/08335043/html5/Open-Data-Oberbuergermeisterwahl-Neuwahl-_Stadt-Konstanz_6-43.csv';
+const DISTRICT_RESULTS_NEW = 'https://www.konstanz.de/konstanz/wahlen/OB-Wahl/08335043/html5/Open-Data-Oberbuergermeisterwahl-Neuwahl-_Stadt-Konstanz_6-44.csv';
+const VOTING_DISTRICT_RESULTS_NEW = 'https://www.konstanz.de/konstanz/wahlen/OB-Wahl/08335043/html5/Open-Data-Oberbuergermeisterwahl-Neuwahl-_Stadt-Konstanz_66.csv';
+
 const csv = require("csvtojson");
 const request = require('request-promise-native');
 
@@ -11,15 +15,28 @@ const csv_options = {
     delimiter: ';'
 };
 var contestants = [];
+var contestants_new = [];
 let index = 0;
-function addContestant(name, surname)
+let index_new = 0;
+function addContestant(name, surname, new_one = false)
 {
-    let c = {'name': name, 'surname': surname, 'index': index++};
+    let i = 0;
+
+    if(new_one)
+    {
+        i = index_new++;
+    } else {
+        i = index++;
+    }
+    let c = {'name': name, 'surname': surname, 'index': i};
     if(surname === 'other')
     {
         c.others = true;
     }
-    contestants.push(c);
+    if(!new_one)
+        contestants.push(c);
+    else
+        contestants_new.push(c);
 }
 
 addContestant('Uli', 'Burchardt');
@@ -28,6 +45,11 @@ addContestant('Jury', 'Martin');
 addContestant('Andreas', 'Hennemann');
 addContestant('Luigi', 'Pantisano');
 addContestant('', 'Andere');
+
+addContestant('Uli', 'Burchardt', true);
+addContestant('Andreas', 'Matt', true);
+addContestant('Luigi', 'Pantisano', true);
+addContestant('', 'Andere', true);
 
 module.exports.city = async (req, res)=>{
     let data = await csv(csv_options).fromStream(request.get(CITY_RESULTS));
@@ -47,8 +69,26 @@ module.exports.votingdistrict = async (req, res)=>{
     res.json(parse(await csv(csv_options).fromStream(request.get(VOTING_DISTRICT_RESULTS))));
 };
 
+module.exports.city_new = async (req, res)=>{
+    let data = await csv(csv_options).fromStream(request.get(CITY_RESULTS_NEW));
 
-function parse(json)
+    data = parse(data, true);
+    data.result = data.result["1"];
+    res.json(data);
+
+};
+module.exports.district_new = async (req, res)=>{
+    let data = await csv(csv_options).fromStream(request.get(DISTRICT_RESULTS_NEW));
+
+    res.json(parse(data, true));
+};
+module.exports.votingdistrict_new = async (req, res)=>{
+
+    res.json(parse(await csv(csv_options).fromStream(request.get(VOTING_DISTRICT_RESULTS_NEW)),true));
+};
+
+
+function parse(json, new_one = false)
 {
 
     let r = {};
@@ -86,5 +126,5 @@ function parse(json)
         };
     }
 
-    return {'contestants': contestants, 'result': r};
+    return {'contestants': new_one ? contestants_new : contestants, 'result': r};
 }

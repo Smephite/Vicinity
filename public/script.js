@@ -1,36 +1,17 @@
 const app = {
     loadingPromises: [],
     storage: {},
-    mapResolve: null,
-    infoWindow: null,
-    map: null,
     load(){
         let color = app.loadColors();
-        app.loadingPromises.push(color, app.loadElectionData(), app.loadElectionDistricts(), new Promise((resolve => app.mapResolve = resolve)));
+        app.loadingPromises.push(color, app.loadElectionData(), app.loadElectionDistricts(), new Promise((resolve => AppMap.mapResolve = resolve)));
         Promise.all(app.loadingPromises).then(app.drawMap);
         Promise.all([app.loadCityElectionData(), color]).then(app.initCityStats)
     },
     drawMap(){
-        for(let district of app.storage.districts)
-        {
-            //console.info(district)
-            for(let bound of district.geometry)
-            {
-                let poly = new google.maps.Polygon({
-                    paths: bound,
-                    strokeColor: app.districtWinnerColor(district),
-                    strokeOpacity: 0.8,
-                    strokeWeight: 2,
-                    fillColor: app.districtColor(district),
-                    fillOpacity: 0.4,
-                });
-                poly.setMap(map);
-                poly.addListener("click", (e)=>app.showInfo(e, district));
-            }
-        }
+        AppMap.drawDistricts(app.storage.districts, app.showInfo);
     },
     getWinner(district) {
-        let contestant = app.storage.election.result[district.number/10]['result']['contestants'];
+        let contestant = app.findDistrict(district)['result']['contestants'];
         //console.info(district.number, district.number/10)
         let max_i = 0;
 
@@ -51,12 +32,30 @@ const app = {
         return app.storage.colors[app.getWinner(district)];
 
     },
-    districtColor(district) {
+    findDistrict(district){
+        if(typeof app.storage.election.result[0].district.number === "object")
+            {
+                for(let d in app.storage.election.result)
+                {
+                    let o = app.storage.election.result[d];
+                    if(o.district.number.indexOf(Math.round(district.number/10)) === -1)
+                        continue;
+                    return o;
+                }
+            } else {
+                return 
+                app.storage.election.result[district.number/10];
+            }
+    },
 
+    districtColor(district) {
+        let districtResult = app.findDistrict(district);
+        
         let r = 0, g = 0, b = 0, votes = 0;
-        let contestants = app.storage.election.result[district.number/10]['result']['contestants'];
+        let contestants = districtResult['result']['contestants'];
         for(let i = 0; i < Object.keys(contestants).length; ++i)
         {
+            if(!contestants[i])continue;
             let rgb = util.hexToRgb(app.storage.colors[i]);
             r+=rgb.r*contestants[i];
             g+=rgb.g*contestants[i];
@@ -65,13 +64,13 @@ const app = {
         }
 
         let winnerRgb = util.hexToRgb(app.districtWinnerColor(district));
-        let perc = votes/100*100; // 10%
+        /*let perc = votes/100*5; // 10%
         votes+=perc;
-        r+=winnerRgb.r*perc;
-        g+=winnerRgb.g*perc;
-        b+=winnerRgb.b*perc;
+        r-=winnerRgb.r*perc;
+        g-=winnerRgb.g*perc;
+        b-=winnerRgb.b*perc;
         //console.info(votes);
-
+*/
         r/=votes;
         g/=votes;
         b/=votes;
@@ -85,7 +84,7 @@ const app = {
     },
     loadElectionData(){
         return new Promise((resolve)=>{
-            $.get('/api/elections/ob2020/district', (data) =>{
+            $.get('/api/elections/lw2021/district', (data) =>{
                 app.storage.election = typeof data === "string" ? JSON.parse(data) : data;
                 //console.info('geo data done');
                 resolve();
@@ -94,7 +93,7 @@ const app = {
     },
     loadElectionDistricts(){
         return new Promise((resolve)=>{
-            $.get('/api/geo/election_districts/2020', function (data) {
+            $.get('/api/geo/districts', function (data) {
                 app.storage.districts = typeof data === "string" ? JSON.parse(data) : data;
                 //console.info('election data done');
                 resolve();
@@ -103,7 +102,7 @@ const app = {
     },
     loadColors(){
         return new Promise((resolve =>
-            $.get('/api/color/2020', function (data) {
+            $.get('/api/color/lw2021', function (data) {
                 app.storage.colors = typeof data === "string" ? JSON.parse(data) : data;
                 //console.info('color done');
                 resolve();
@@ -111,7 +110,7 @@ const app = {
     },
     loadCityElectionData(){
         return new Promise((resolve)=>{
-            $.get('/api/elections/ob2020/city', (data) =>{
+            $.get('/api/elections/lw2021/city', (data) =>{
                 app.storage.electionCity = typeof data === "string" ? JSON.parse(data) : data;
                 resolve();
             });
@@ -134,7 +133,10 @@ const app = {
 
         for(let i = 0; i < contestants.length; ++i)
         {
-            barChartData.datasets.push({label: `${contestants[i].name} ${contestants[i].surname}`, data: [(result.contestants[i]/result.valid*100).toFixed(2)], backgroundColor: app.storage.colors[i]});
+            if(!contestants[i])
+                continue;
+            let party = contestants[i].party ? `, ${contestants[i].party}` : "";
+            barChartData.datasets.push({label: `${contestants[i].name} ${contestants[i].surname}${party}`, data: [(result.contestants[i]/result.valid*100).toFixed(2)], backgroundColor: app.storage.colors[i]});
         }
         barChartData.datasets.sort((a, b)=>{return b.data[0]-a.data[0]});
 
@@ -149,22 +151,6 @@ const app = {
             }
         });
         $('#statbtn').show();
-    },
-    initMap(){
-        map = new google.maps.Map(document.getElementById('map'), {
-            center: {lat: 47.707216, lng: 9.168514},
-            zoom: 13,
-            styles: [{
-                featureType: 'poi',
-                stylers: [{ visibility: 'off' }]  // Turn off points of interest.
-            }],
-            disableDoubleClickZoom: false,
-            streetViewControl: false,
-            disableDefaultUI: true
-        });
-        app.mapResolve();
-        //console.info("Map done");
-        app.infoWindow = new google.maps.InfoWindow();
     }
 };
 
@@ -176,7 +162,7 @@ app.showInfo = (event, district) => {
         `${district.name} (${district.number})<br>`;
 
     if(app.storage.election !== undefined) {
-        let result = app.storage.election.result[district.number / 10].result;
+        let result = app.findDistrict(district).result;
         content += `Wähler / Berechtigte: ${result.votes} / ${result.eligible}<br>` +
             `Wahlquote: ${Math.fround(result.votes / result.eligible * 100).toFixed(2)}%<br>` +
             `Gewinner: <b>${app.storage.election.contestants[app.getWinner(district)].surname}</b><br>` +
@@ -185,24 +171,29 @@ app.showInfo = (event, district) => {
         let pieChartData = {datasets: [{data:[], backgroundColor: []}], labels:[]};
         let barChartData = {datasets: []};
 
-        for (let i = 0; i < Object.keys(result.contestants).length; ++i) {
+        for (let i = 0; i < Object.keys(app.storage.election.contestants).length; ++i) {
+            if(!app.storage.election.contestants[i])
+                continue;
             let winner = app.getWinner(district) === i;
 
             if (winner)
                 content += `<b>`;
 
-            content += `${app.storage.election.contestants[i].surname}: ${result.contestants[i]} (${(result.contestants[i]/result.votes*100).toFixed(2)}%)<br>`;
+            let votes = result.contestants[i] ? result.contestants[i] : 0;
+            let party = app.storage.election.contestants[i].party ? `, ${app.storage.election.contestants[i].party}` : "";
+            
+            content += `${app.storage.election.contestants[i].surname}${party}: ${votes} (${(votes/result.votes*100).toFixed(2)}%)<br>`;
 
             if (winner)
                 content += `</b>`;
 
-            let color = app.storage.colors[i], surname = app.storage.election.contestants[i].surname, votes = result.contestants[i];
+            let color = app.storage.colors[i], surname = app.storage.election.contestants[i].surname;
 
             pieChartData.datasets[0].data.push(votes);
             pieChartData.datasets[0].backgroundColor.push(app.storage.colors[i]);
-            pieChartData.labels.push(surname);
+            pieChartData.labels.push(`${surname}${party}`);
 
-            barChartData.datasets.push({label: surname, data: [votes], backgroundColor: color})
+            barChartData.datasets.push({label: `${surname}${party}`, data: [votes], backgroundColor: color})
 
 
         }
@@ -210,15 +201,14 @@ app.showInfo = (event, district) => {
         content += `<canvas id = "chart"> </canvas>`;
 
 
-        app.infoWindow.setContent(content);
-        app.infoWindow.setPosition(event.latLng);
-        app.infoWindow.open(map);
+        AppMap.infoWindow.setContent(content);
+        AppMap.infoWindow.setPosition(event.latLng);
+        AppMap.infoWindow.open(AppMap.map);
 
         barChartData.datasets.sort((a, b)=>{return b.data[0]-a.data[0]});
 
 
-        app.infoWindow.addListener("domready", (e) => {
-
+        google.maps.event.addListener(AppMap.infoWindow, 'domready', ()=>{
             var ctx = document.getElementById("chart");
             var myChart = new Chart(ctx, {
                 type: 'bar',
@@ -230,7 +220,9 @@ app.showInfo = (event, district) => {
                 }
             });
 
+            google.maps.event.clearInstanceListeners(AppMap.infoWindow);
         });
+
     }
 
 };
@@ -252,4 +244,3 @@ const util = {
         return hex.length == 1 ? "0" + hex : hex;
     }
 };
-
